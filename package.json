@@ -1,5 +1,5 @@
 {
-  "name": "@linxin666/dsh-client-ui-approval-notify",
+  "name": "@whoisDDD/dsh-approval-notify",
   "description": "Minimal DSH web GUI plugin that raises a toast and optional browser notification when an approval request appears.",
   "version": "0.1.0",
   "type": "module",
@@ -43,6 +43,7 @@
     "@types/react": "~18.3.1",
     "@types/react-dom": "^18.3.5",
     "jsdom": "29.1.1",
+    "lightningcss": "^1.32.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsdown": "0.22.2",

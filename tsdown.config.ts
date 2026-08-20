@@ -3,4 +3,4 @@
  */
 import { clientBundle } from './shared/tsdown.client.ts'
 
-export default clientBundle('@linxin666/dsh-client-ui-approval-notify', ['src/index.ts'])
+export default clientBundle('@whoisDDD/dsh-approval-notify', ['src/index.ts'])

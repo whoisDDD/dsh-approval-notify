@@ -1,6 +1,6 @@
 # bundle patch for the approval-notify plugin: inserts its plugin row into the web
 # profile roster. Install with
-# `dsh plugin --profile web add link:<repo>/packages/approval-notify`.
+# `dsh plugin --profile web add link:<repo>/approval-notify`.
 - insert:
     - id: ui-approval-notify
-      name: '@linxin666/dsh-client-ui-approval-notify'
+      name: '@whoisDDD/dsh-approval-notify'
