@@ -1,9 +1,9 @@
 /**
  * Browser-half approval notifier for the DSH web GUI.
  *
- * It watches the session list snapshot for new approval requests and emits a
- * browser notification first, then falls back to a right-bottom stacked toast
- * panel if the browser notification cannot be shown.
+ * It watches the session list snapshot for pending user interactions and
+ * completed sessions. It emits a browser notification first, then falls back
+ * to a right-bottom stacked toast panel if the browser notification cannot be shown.
  */
 import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import { alertPartsOf } from '../core/alert.ts'
@@ -12,7 +12,6 @@ import { diffApprovalMessages, type SessionAttentionStatus } from '../core/appro
 const TOAST_ROOT_ID = 'dsh-approval-toast-root'
 const TOAST_ITEM_CLASS = 'dsh-approval-toast'
 const TOAST_LIFETIME_MS = 12_000
-const TOAST_MARGIN_MS = 1200
 const POLL_FALLBACK_MS = 1500
 const BOOT_NOTICE = 'approval-notify 已加载'
 
@@ -149,5 +148,4 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'approval-notify: watch sessions')
 }
-
 
