@@ -1,6 +1,6 @@
 {
   "name": "@whoisDDD/dsh-approval-notify",
-  "description": "Minimal DSH web GUI plugin that raises a toast and optional browser notification when an approval request appears.",
+  "description": "Minimal DSH web GUI plugin that raises native browser notifications or fallback toasts for approval, question, plan-review, and completed-session reminders.",
   "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
@@ -31,6 +31,7 @@
     "build": "tsc -p tsconfig.build.json && tsdown",
     "prepare": "tsdown",
     "test": "vitest run",
+    "test:notify": "vitest run tests/notification-behavior.spec.ts",
     "typecheck": "tsc --noEmit",
     "watch": "tsdown --watch"
   },
@@ -60,3 +61,4 @@
   ],
   "license": "BSD-3-Clause"
 }
+

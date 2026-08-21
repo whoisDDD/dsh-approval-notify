@@ -27,9 +27,10 @@ function makeSnapshot(pendingInteraction?: PendingInteractionStatus): SessionLis
 describe('approval-notify', () => {
   it('emits one message on approval edge', () => {
     const first = diffApprovalMessages(makeSnapshot('approval'), new Map())
-    expect(first.messages).toEqual(['会话「Alpha」正在等待审批'])
+    expect(first.messages).toEqual(['审批请求：会话「Alpha」正在等待审批'])
 
     const second = diffApprovalMessages(makeSnapshot('approval'), first.nextSeen)
     expect(second.messages).toEqual([])
   })
 })
+
