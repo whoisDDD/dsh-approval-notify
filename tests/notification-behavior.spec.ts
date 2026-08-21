@@ -3,7 +3,7 @@ import type { PendingInteractionStatus, SessionId, SessionListState, SessionSumm
 import { deliverAlert, alertPartsOf } from '../src/core/alert.ts'
 import { diffApprovalMessages, type SessionAttentionStatus } from '../src/core/approval.ts'
 
-function makeSnapshot(pendingInteraction?: PendingInteractionStatus, completed = false): SessionListState {
+function makeSnapshot(pendingInteraction?: PendingInteractionStatus, completed = false, subagent = false): SessionListState {
   const sessionId = 's1' as SessionId
   const summary: SessionSummary = {
     id: sessionId,
@@ -14,6 +14,7 @@ function makeSnapshot(pendingInteraction?: PendingInteractionStatus, completed =
     updatedAt: 1,
     pendingInteraction,
     completed,
+    ...(subagent ? { origin: 'subagent' as const, parentId: 'parent' as SessionId } : {}),
   }
   return {
     ids: [sessionId],
@@ -43,11 +44,13 @@ describe('approval-notify core', () => {
     const question = diffApprovalMessages(makeSnapshot('question'), new Map())
     const review = diffApprovalMessages(makeSnapshot('plan-review'), new Map())
     const done = diffApprovalMessages(makeSnapshot(undefined, true), new Map<SessionId, SessionAttentionStatus | undefined>())
+    const subagentDone = diffApprovalMessages(makeSnapshot(undefined, true, true), new Map<SessionId, SessionAttentionStatus | undefined>())
 
     expect(approval.messages).toEqual(['审批请求：会话「Alpha」正在等待审批'])
     expect(question.messages).toEqual(['提问请求：会话「Alpha」正在等待你的选择'])
     expect(review.messages).toEqual(['计划审核：会话「Alpha」正在等待确认'])
     expect(done.messages).toEqual(['已完成：会话「Alpha」已完成'])
+    expect(subagentDone.messages).toEqual(['子代理已完成：会话「Alpha」已完成'])
   })
 
   it('splits alert messages into title and body', () => {
@@ -123,5 +126,4 @@ describe('approval-notify notification mode', () => {
     expect(notified).toBe(true)
   })
 })
-
 

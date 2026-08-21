@@ -19,6 +19,13 @@ function attentionStatusOf(entry: SessionListEntry): SessionAttentionStatus | un
   return undefined
 }
 
+function completedMessageFor(entry: SessionListEntry, label: string): string {
+  if (entry.origin === 'subagent' || entry.parentId !== undefined) {
+    return `子代理已完成：会话「${label}」已完成`
+  }
+  return `已完成：会话「${label}」已完成`
+}
+
 function messageFor(entry: SessionListEntry, status: SessionAttentionStatus): string | undefined {
   const label = sessionLabel(entry)
   switch (status) {
@@ -29,7 +36,7 @@ function messageFor(entry: SessionListEntry, status: SessionAttentionStatus): st
     case 'plan-review':
       return `计划审核：会话「${label}」正在等待确认`
     case 'completed':
-      return `已完成：会话「${label}」已完成`
+      return completedMessageFor(entry, label)
     default:
       return undefined
   }

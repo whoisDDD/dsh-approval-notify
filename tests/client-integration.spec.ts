@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PendingInteractionStatus, SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply } from '../src/client/index.ts'
 
-function makeSummary(id: string, title: string, pendingInteraction?: PendingInteractionStatus, completed = false): SessionSummary {
+function makeSummary(id: string, title: string, pendingInteraction?: PendingInteractionStatus, completed = false, subagent = false): SessionSummary {
   return {
     id: id as SessionId,
     displayTitle: title,
@@ -13,6 +13,7 @@ function makeSummary(id: string, title: string, pendingInteraction?: PendingInte
     updatedAt: 1,
     pendingInteraction,
     completed,
+    ...(subagent ? { origin: 'subagent' as const, parentId: 'parent' as SessionId } : {}),
   }
 }
 
@@ -176,6 +177,21 @@ describe('approval-notify browser integration', () => {
     mounted.dispose()
   })
 
+  it('creates a system notification for completed subagents with a distinct title', async () => {
+    const { createCalls } = installNotificationMock({ permission: 'granted' })
+    const mounted = mountPlugin(makeSnapshot([]))
+    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Visual Agent', undefined, true, true)]))
+    await flushAsync()
+    expect(createCalls).toContainEqual({
+      title: '子代理已完成',
+      options: {
+        body: '会话「Visual Agent」已完成',
+        requireInteraction: true,
+      },
+    })
+    mounted.dispose()
+  })
+
   it('falls back to a large stacked toast when notification creation fails', async () => {
     installNotificationMock({ permission: 'granted', throwOnCreate: true })
     const mounted = mountPlugin(makeSnapshot([]))
@@ -197,14 +213,16 @@ describe('approval-notify browser integration', () => {
       makeSummary('s2', 'Beta', 'question'),
       makeSummary('s3', 'Gamma', 'plan-review'),
       makeSummary('s4', 'Delta', undefined, true),
+      makeSummary('s5', 'Visual Agent', undefined, true, true),
     ]))
     await flushAsync()
     const root = document.getElementById('dsh-approval-toast-root')
-    expect(root?.children.length).toBeGreaterThanOrEqual(4)
+    expect(root?.children.length).toBeGreaterThanOrEqual(5)
     expect(root?.textContent).toContain('审批请求')
     expect(root?.textContent).toContain('提问请求')
     expect(root?.textContent).toContain('计划审核')
     expect(root?.textContent).toContain('已完成')
+    expect(root?.textContent).toContain('子代理已完成')
     mounted.dispose()
   })
 
