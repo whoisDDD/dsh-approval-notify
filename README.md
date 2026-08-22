@@ -1,4 +1,4 @@
-# @whoisDDD/dsh-approval-notify
+# @whoisddd/dsh-approval-notify
 
 English | [中文](README.zh.md)
 

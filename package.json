@@ -1,5 +1,5 @@
 {
-  "name": "@whoisDDD/dsh-approval-notify",
+  "name": "@whoisddd/dsh-approval-notify",
   "description": "Minimal DSH web GUI plugin that raises native browser notifications or fallback toasts for approval, question, plan-review, and completed-session reminders.",
   "version": "0.1.0",
   "type": "module",
