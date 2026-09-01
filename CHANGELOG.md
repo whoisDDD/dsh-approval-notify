@@ -17,6 +17,8 @@ All notable changes to this project are documented here.
 
 - Expanded the package from approval-only reminders to broader session attention reminders.
 - Updated README documentation in English and Chinese.
+- Adapted the Client half for DSH `0.1.2-alpha.2`: `sessions` and `uiSession` are declared as Client services, pending approval/question/plan-review state is read from `uiSession.pendingInteractions`, and the removed `dsh-client-runtime` API is no longer referenced.
+- Added safe ignoring of unknown future interaction kinds and disposal guards for asynchronous notification fallback.
 
 ### Notes
 

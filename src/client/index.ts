@@ -1,24 +1,31 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { UiSession } from '@deepseek-ai/dsh-client-ui-session/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { alertPartsOf } from '../core/alert.ts'
+import { diffApprovalMessages, type PendingInteractionLike, type SessionAttentionMarker, type SessionAttentionStatus } from '../core/approval.ts'
+
+type ApprovalNotifyContext = Context & {
+  readonly sessions: ISessions
+  readonly uiSession: UiSession
+}
+
 /**
  * Browser-half approval notifier for the DSH web GUI.
  *
- * It watches the session list snapshot for pending user interactions and
- * completed sessions. It emits a browser notification first, then falls back
- * to a right-bottom stacked toast panel if the browser notification cannot be shown.
+ * Alpha.2 keeps completed state on the session list, while pending approval,
+ * question, and plan-review state is exposed by uiSession.pendingInteractions.
  */
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import { alertPartsOf } from '../core/alert.ts'
-import { diffApprovalMessages, type SessionAttentionStatus } from '../core/approval.ts'
-
 const TOAST_ROOT_ID = 'dsh-approval-toast-root'
 const TOAST_ITEM_CLASS = 'dsh-approval-toast'
 const TOAST_LIFETIME_MS = 12_000
 const POLL_FALLBACK_MS = 1500
 const BOOT_NOTICE = 'approval-notify 已加载'
 
-let lastSeen = new Map<SessionId, SessionAttentionStatus | undefined>()
+let lastSeen = new Map<SessionId, SessionAttentionMarker | undefined>()
 let bootNoticeShown = false
 let permissionPrompt: Promise<NotificationPermission> | undefined
-let toastTimers: number[] = []
+let toastTimers = new Set<number>()
 
 function ensureToastRoot(): HTMLElement {
   let root = document.getElementById(TOAST_ROOT_ID)
@@ -39,6 +46,15 @@ function ensureToastRoot(): HTMLElement {
   ].join(';')
   document.body.appendChild(root)
   return root
+}
+
+function setTimer(callback: () => void, delay: number): number {
+  const timer = window.setTimeout(() => {
+    toastTimers.delete(timer)
+    callback()
+  }, delay)
+  toastTimers.add(timer)
+  return timer
 }
 
 function createToast(title: string, body: string): void {
@@ -62,13 +78,12 @@ function createToast(title: string, body: string): void {
     'pointer-events:auto',
   ].join(';')
   root.appendChild(el)
-  const timer = window.setTimeout(() => {
+  setTimer(() => {
     el.style.opacity = '0'
     el.style.transform = 'translateY(8px)'
     el.style.transition = 'opacity 0.25s ease, transform 0.25s ease'
-    window.setTimeout(() => el.remove(), 260)
+    setTimer(() => el.remove(), 260)
   }, TOAST_LIFETIME_MS)
-  toastTimers.push(timer)
 }
 
 function escapeHtml(text: string): string {
@@ -91,15 +106,16 @@ async function resolveNotificationPermission(): Promise<NotificationPermission> 
   if (!('Notification' in window)) return 'denied'
   if (Notification.permission !== 'default') return Notification.permission
   if (permissionPrompt !== undefined) return permissionPrompt
-  permissionPrompt = Notification.requestPermission().finally(() => {
-    permissionPrompt = undefined
-  })
+  permissionPrompt = Notification.requestPermission()
+    .catch(() => 'denied' as NotificationPermission)
+    .finally(() => {
+      permissionPrompt = undefined
+    })
   return permissionPrompt
 }
 
-async function notifyBrowser(title: string, message: string): Promise<boolean> {
-  const permission = await resolveNotificationPermission()
-  if (permission !== 'granted') return false
+async function notifyBrowser(title: string, message: string, active: () => boolean): Promise<boolean> {
+  if (await resolveNotificationPermission() !== 'granted' || !active()) return false
   try {
     new Notification(title, {
       body: message,
@@ -111,41 +127,54 @@ async function notifyBrowser(title: string, message: string): Promise<boolean> {
   }
 }
 
-async function renderAlert(message: string): Promise<void> {
+async function renderAlert(message: string, active: () => boolean): Promise<void> {
   const { title, body } = alertPartsOf(message)
-  const notified = await notifyBrowser(title, body)
-  if (!notified) createToast(title, body)
+  const notified = await notifyBrowser(title, body, active)
+  if (!notified && active()) createToast(title, body)
 }
 
-function runCheck(ctx: ClientContext): void {
-  const snapshot = ctx.sessions.list.getSnapshot()
-  const { messages, nextSeen } = diffApprovalMessages(snapshot, lastSeen)
+function runCheck(
+  ctx: ApprovalNotifyContext,
+  pendingInteractions: ReadonlyMap<SessionId, PendingInteractionLike>,
+  active: () => boolean,
+): void {
+  const { messages, nextSeen } = diffApprovalMessages(
+    ctx.sessions.list.getSnapshot(),
+    pendingInteractions,
+    lastSeen,
+  )
   lastSeen = nextSeen
-  if (messages.length === 0) return
-  for (const message of messages) void renderAlert(message)
+  if (messages.length === 0 || !active()) return
+  for (const message of messages) void renderAlert(message, active)
 }
 
-export const inject = ['sessions']
+/** Services provided by alpha.2's Session Controller and UI Session plugins. */
+export const inject = ['sessions', 'uiSession']
 
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: ApprovalNotifyContext): void {
   ctx.effect(() => {
+    let disposed = false
+    const active = (): boolean => !disposed
     showBootNotice()
     void resolveNotificationPermission()
-    const sync = (): void => { runCheck(ctx) }
+    const sync = (): void => {
+      runCheck(ctx, ctx.uiSession.pendingInteractions.getSnapshot(), active)
+    }
     sync()
-    const unsubscribe = ctx.sessions.list.subscribe(sync)
+    const unsubscribeSessions = ctx.sessions.list.subscribe(sync)
+    const unsubscribePending = ctx.uiSession.pendingInteractions.subscribe(sync)
     const timer = window.setInterval(sync, POLL_FALLBACK_MS)
     return () => {
-      unsubscribe()
+      disposed = true
+      unsubscribeSessions()
+      unsubscribePending()
       window.clearInterval(timer)
       for (const item of toastTimers) window.clearTimeout(item)
-      toastTimers = []
+      toastTimers.clear()
       lastSeen = new Map()
       bootNoticeShown = false
       permissionPrompt = undefined
-      const root = document.getElementById(TOAST_ROOT_ID)
-      root?.remove()
+      document.getElementById(TOAST_ROOT_ID)?.remove()
     }
   }, 'approval-notify: watch sessions')
 }
-

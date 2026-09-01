@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PendingInteractionStatus, SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
-import { apply } from '../src/client/index.ts'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { apply, inject } from '../src/client/index.ts'
 
-function makeSummary(id: string, title: string, pendingInteraction?: PendingInteractionStatus, completed = false, subagent = false): SessionSummary {
+function makeSummary(id: string, title: string, completed = false, subagent = false): SessionSummary {
   return {
     id: id as SessionId,
     displayTitle: title,
@@ -11,7 +12,6 @@ function makeSummary(id: string, title: string, pendingInteraction?: PendingInte
     running: false,
     blank: false,
     updatedAt: 1,
-    pendingInteraction,
     completed,
     ...(subagent ? { origin: 'subagent' as const, parentId: 'parent' as SessionId } : {}),
   }
@@ -29,11 +29,11 @@ function makeSnapshot(summaries: SessionSummary[]): SessionListState {
   }
 }
 
-function makeSessions(initial: SessionListState) {
+function makeStore<T>(initial: T) {
   const listeners = new Set<() => void>()
   let snapshot = initial
   return {
-    list: {
+    store: {
       subscribe(listener: () => void) {
         listeners.add(listener)
         return () => {
@@ -42,10 +42,29 @@ function makeSessions(initial: SessionListState) {
       },
       getSnapshot: () => snapshot,
     },
-    set(next: SessionListState) {
+    set(next: T) {
       snapshot = next
       for (const listener of listeners) listener()
     },
+    listenerCount: () => listeners.size,
+  }
+}
+
+function makeSessions(initial: SessionListState) {
+  const list = makeStore(initial)
+  return {
+    list: list.store,
+    set: list.set,
+    listenerCount: list.listenerCount,
+  }
+}
+
+function makePending(initial: ReadonlyMap<SessionId, { key: string; kind: string; sessionId: SessionId }> = new Map()) {
+  const pending = makeStore(initial)
+  return {
+    pendingInteractions: pending.store,
+    set: pending.set,
+    listenerCount: pending.listenerCount,
   }
 }
 
@@ -73,11 +92,17 @@ function installNotificationMock(mode: {
   return { createCalls, requestCalls }
 }
 
-function mountPlugin(initial: SessionListState) {
+function pending(kind: string, sessionId = 's1'): ReadonlyMap<SessionId, { key: string; kind: string; sessionId: SessionId }> {
+  return new Map([[sessionId as SessionId, { key: `${kind}:1`, kind, sessionId: sessionId as SessionId }]])
+}
+
+function mountPlugin(initial: SessionListState, initialPending = new Map<SessionId, { key: string; kind: string; sessionId: SessionId }>()) {
   const sessions = makeSessions(initial)
+  const uiSession = makePending(initialPending)
   const disposers: Array<() => void> = []
   const ctx = {
     sessions: { list: sessions.list },
+    uiSession: { pendingInteractions: uiSession.pendingInteractions },
     effect(fn: () => () => void) {
       const dispose = fn()
       disposers.push(dispose)
@@ -87,6 +112,7 @@ function mountPlugin(initial: SessionListState) {
   apply(ctx)
   return {
     sessions,
+    uiSession,
     dispose() {
       for (const dispose of disposers) dispose()
     },
@@ -109,6 +135,10 @@ describe('approval-notify browser integration', () => {
     document.body.innerHTML = ''
   })
 
+  it('declares the alpha.2 services used by the client half', () => {
+    expect(inject).toEqual(['sessions', 'uiSession'])
+  })
+
   it('requests notification permission on mount when permission is default', async () => {
     const { requestCalls } = installNotificationMock({ permission: 'default', requestResult: 'granted' })
     const mounted = mountPlugin(makeSnapshot([]))
@@ -117,62 +147,27 @@ describe('approval-notify browser integration', () => {
     mounted.dispose()
   })
 
-  it('creates a system notification for approval when permission is granted', async () => {
+  it.each([
+    ['approval', '审批请求', '会话「Alpha」正在等待审批'],
+    ['question', '提问请求', '会话「Alpha」正在等待你的选择'],
+    ['plan-review', '计划审核', '会话「Alpha」正在等待确认'],
+  ] as const)('creates a system notification for alpha.2 %s interaction', async (kind: 'approval' | 'question' | 'plan-review', title: string, body: string) => {
     const { createCalls } = installNotificationMock({ permission: 'granted' })
-    const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', 'approval')]))
+    const mounted = mountPlugin(makeSnapshot([makeSummary('s1', 'Alpha')]))
+    mounted.uiSession.set(pending(kind))
     await flushAsync()
-    expect(createCalls).toContainEqual({
-      title: '审批请求',
-      options: {
-        body: '会话「Alpha」正在等待审批',
-        requireInteraction: true,
-      },
-    })
+    expect(createCalls).toContainEqual({ title, options: { body, requireInteraction: true } })
     mounted.dispose()
   })
 
-  it('creates a system notification for question with a distinct title', async () => {
+  it('creates a system notification for completed sessions', async () => {
     const { createCalls } = installNotificationMock({ permission: 'granted' })
     const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', 'question')]))
-    await flushAsync()
-    expect(createCalls).toContainEqual({
-      title: '提问请求',
-      options: {
-        body: '会话「Alpha」正在等待你的选择',
-        requireInteraction: true,
-      },
-    })
-    mounted.dispose()
-  })
-
-  it('creates a system notification for plan review with a distinct title', async () => {
-    const { createCalls } = installNotificationMock({ permission: 'granted' })
-    const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', 'plan-review')]))
-    await flushAsync()
-    expect(createCalls).toContainEqual({
-      title: '计划审核',
-      options: {
-        body: '会话「Alpha」正在等待确认',
-        requireInteraction: true,
-      },
-    })
-    mounted.dispose()
-  })
-
-  it('creates a system notification for completed sessions with a distinct title', async () => {
-    const { createCalls } = installNotificationMock({ permission: 'granted' })
-    const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', undefined, true)]))
+    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', true)]))
     await flushAsync()
     expect(createCalls).toContainEqual({
       title: '已完成',
-      options: {
-        body: '会话「Alpha」已完成',
-        requireInteraction: true,
-      },
+      options: { body: '会话「Alpha」已完成', requireInteraction: true },
     })
     mounted.dispose()
   })
@@ -180,22 +175,19 @@ describe('approval-notify browser integration', () => {
   it('creates a system notification for completed subagents with a distinct title', async () => {
     const { createCalls } = installNotificationMock({ permission: 'granted' })
     const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Visual Agent', undefined, true, true)]))
+    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Visual Agent', true, true)]))
     await flushAsync()
     expect(createCalls).toContainEqual({
       title: '子代理已完成',
-      options: {
-        body: '会话「Visual Agent」已完成',
-        requireInteraction: true,
-      },
+      options: { body: '会话「Visual Agent」已完成', requireInteraction: true },
     })
     mounted.dispose()
   })
 
-  it('falls back to a large stacked toast when notification creation fails', async () => {
-    installNotificationMock({ permission: 'granted', throwOnCreate: true })
-    const mounted = mountPlugin(makeSnapshot([]))
-    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Alpha', 'question')]))
+  it('falls back to a large stacked toast when notification is unavailable', async () => {
+    installNotificationMock({ permission: 'denied' })
+    const mounted = mountPlugin(makeSnapshot([makeSummary('s1', 'Alpha')]))
+    mounted.uiSession.set(pending('question'))
     await flushAsync()
     const root = document.getElementById('dsh-approval-toast-root')
     expect(root).not.toBeNull()
@@ -205,15 +197,30 @@ describe('approval-notify browser integration', () => {
     mounted.dispose()
   })
 
+  it('falls back to toast when permission request is unavailable', async () => {
+    installNotificationMock({ permission: 'default', requestResult: 'denied' })
+    const mounted = mountPlugin(makeSnapshot([makeSummary('s1', 'Alpha')]))
+    mounted.uiSession.set(pending('approval'))
+    await flushAsync()
+    expect(document.getElementById('dsh-approval-toast-root')?.textContent).toContain('审批请求')
+    mounted.dispose()
+  })
+
+
   it('stacks multiple fallback toasts upward', async () => {
     installNotificationMock({ permission: 'denied' })
     const mounted = mountPlugin(makeSnapshot([]))
     mounted.sessions.set(makeSnapshot([
-      makeSummary('s1', 'Alpha', 'approval'),
-      makeSummary('s2', 'Beta', 'question'),
-      makeSummary('s3', 'Gamma', 'plan-review'),
-      makeSummary('s4', 'Delta', undefined, true),
-      makeSummary('s5', 'Visual Agent', undefined, true, true),
+      makeSummary('s1', 'Alpha'),
+      makeSummary('s2', 'Beta'),
+      makeSummary('s3', 'Gamma'),
+      makeSummary('s4', 'Delta', true),
+      makeSummary('s5', 'Visual Agent', true, true),
+    ]))
+    mounted.uiSession.set(new Map([
+      ...pending('approval', 's1'),
+      ...pending('question', 's2'),
+      ...pending('plan-review', 's3'),
     ]))
     await flushAsync()
     const root = document.getElementById('dsh-approval-toast-root')
@@ -228,26 +235,36 @@ describe('approval-notify browser integration', () => {
 
   it('does not repeat a notification while the same pending state remains unchanged', async () => {
     const { createCalls } = installNotificationMock({ permission: 'granted' })
-    const mounted = mountPlugin(makeSnapshot([]))
-    const pending = makeSnapshot([makeSummary('s1', 'Alpha', 'approval')])
-    mounted.sessions.set(pending)
-    mounted.sessions.set(pending)
+    const mounted = mountPlugin(makeSnapshot([makeSummary('s1', 'Alpha')]))
+    const pendingState = pending('approval')
+    mounted.uiSession.set(pendingState)
+    mounted.uiSession.set(pendingState)
     await flushAsync()
-    const approvalCalls = createCalls.filter((call) => call.title === '审批请求')
-    expect(approvalCalls).toHaveLength(1)
+    expect(createCalls.filter((call) => call.title === '审批请求')).toHaveLength(1)
     mounted.dispose()
   })
 
   it('does not repeat a completed notification while completed remains unchanged', async () => {
     const { createCalls } = installNotificationMock({ permission: 'granted' })
     const mounted = mountPlugin(makeSnapshot([]))
-    const completed = makeSnapshot([makeSummary('s1', 'Alpha', undefined, true)])
+    const completed = makeSnapshot([makeSummary('s1', 'Alpha', true)])
     mounted.sessions.set(completed)
     mounted.sessions.set(completed)
     await flushAsync()
-    const completedCalls = createCalls.filter((call) => call.title === '已完成')
-    expect(completedCalls).toHaveLength(1)
+    expect(createCalls.filter((call) => call.title === '已完成')).toHaveLength(1)
     mounted.dispose()
   })
-})
 
+  it('removes both subscriptions and prevents late async fallback after disposal', async () => {
+    const { createCalls } = installNotificationMock({ permission: 'granted' })
+    const mounted = mountPlugin(makeSnapshot([makeSummary('s1', 'Alpha')]))
+    mounted.dispose()
+    expect(mounted.sessions.listenerCount()).toBe(0)
+    expect(mounted.uiSession.listenerCount()).toBe(0)
+    mounted.sessions.set(makeSnapshot([makeSummary('s1', 'Late', true)]))
+    mounted.uiSession.set(pending('approval'))
+    await flushAsync()
+    expect(createCalls.filter((call) => call.title !== '通知已启用')).toHaveLength(0)
+    expect(document.getElementById('dsh-approval-toast-root')).toBeNull()
+  })
+})

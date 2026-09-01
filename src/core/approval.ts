@@ -1,22 +1,63 @@
-import type { PendingInteractionStatus, SessionId, SessionListState, SessionSummary } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export type SessionListEntry = SessionSummary
-export type SessionAttentionStatus = PendingInteractionStatus | 'completed'
+export type SessionAttentionStatus = 'approval' | 'question' | 'plan-review' | 'completed'
+export type SessionAttentionMarker = string
+
+/** Stable alpha.2 fields used from uiSession.pendingInteractions. */
+export interface PendingInteractionLike {
+  readonly key: string
+  readonly kind: string
+  readonly sessionId: SessionId
+}
 
 export interface ApprovalDiff {
   messages: string[]
-  nextSeen: Map<SessionId, SessionAttentionStatus | undefined>
+  nextSeen: Map<SessionId, SessionAttentionMarker | undefined>
 }
 
 function sessionLabel(entry: SessionListEntry): string {
   const title = entry.title?.trim()
-  return title === undefined || title === '' ? entry.displayTitle : title
+  const label = title === undefined || title === '' ? entry.displayTitle : title
+  return redactSensitiveText(label).slice(0, 160)
 }
 
-function attentionStatusOf(entry: SessionListEntry): SessionAttentionStatus | undefined {
-  if (entry.pendingInteraction !== undefined) return entry.pendingInteraction
-  if (entry.completed === true) return 'completed'
-  return undefined
+function redactSensitiveText(text: string): string {
+  return text
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/gi, '[redacted-token]')
+    .replace(/\b(?:sk|pat|ghp|glpat|xox[baprs])[-_][A-Za-z0-9_-]{12,}\b/gi, '[redacted-token]')
+    .replace(/\b(?:bearer|api[-_ ]?key|access[-_ ]?token|password|secret)\s*[:=]\s*\S+/gi, '[redacted-secret]')
+}
+
+function pendingStatusOf(interaction: PendingInteractionLike | undefined): SessionAttentionStatus | undefined {
+  switch (interaction?.kind) {
+    case 'approval':
+    case 'question':
+    case 'plan-review':
+      return interaction.kind
+    default:
+      // New interaction domains must not be guessed into a misleading alert.
+      return undefined
+  }
+}
+
+function attentionStatusOf(
+  entry: SessionListEntry,
+  interaction: PendingInteractionLike | undefined,
+): SessionAttentionStatus | undefined {
+  return pendingStatusOf(interaction) ?? (entry.completed === true ? 'completed' : undefined)
+}
+
+function attentionMarkerOf(
+  interaction: PendingInteractionLike | undefined,
+  status: SessionAttentionStatus | undefined,
+): SessionAttentionMarker | undefined {
+  if (status === undefined) return undefined
+  if (interaction !== undefined && pendingStatusOf(interaction) !== undefined) {
+    return `${status}:${interaction.key}`
+  }
+  return status
 }
 
 function completedMessageFor(entry: SessionListEntry, label: string): string {
@@ -44,17 +85,20 @@ function messageFor(entry: SessionListEntry, status: SessionAttentionStatus): st
 
 export function diffApprovalMessages(
   snapshot: SessionListState,
-  previous: ReadonlyMap<SessionId, SessionAttentionStatus | undefined>,
+  pendingInteractions: ReadonlyMap<SessionId, PendingInteractionLike>,
+  previous: ReadonlyMap<SessionId, SessionAttentionMarker | undefined>,
 ): ApprovalDiff {
-  const nextSeen = new Map<SessionId, SessionAttentionStatus | undefined>()
+  const nextSeen = new Map<SessionId, SessionAttentionMarker | undefined>()
   const messages: string[] = []
   for (const sessionId of snapshot.ids) {
     const entry = snapshot.byId[sessionId]
-    const current = attentionStatusOf(entry)
+    const interaction = pendingInteractions.get(sessionId)
+    const status = attentionStatusOf(entry, interaction)
+    const current = attentionMarkerOf(interaction, status)
     const prior = previous.get(sessionId)
     nextSeen.set(sessionId, current)
-    if (current !== undefined && prior !== current) {
-      const message = messageFor(entry, current)
+    if (status !== undefined && current !== prior) {
+      const message = messageFor(entry, status)
       if (message !== undefined) messages.push(message)
     }
   }
