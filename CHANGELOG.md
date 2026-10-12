@@ -15,15 +15,17 @@ All notable changes to this project are documented here. / 本项目的所有重
 
 - Keep notification state and timers per Client context; unloading one context only removes its own toasts. Prevent late asynchronous notification delivery after disposal.
 - 通知状态、定时器按上下文独立管理，卸载只清理自己的 toast；卸载后异步权限响应不会触发提醒。
-- Catch synchronous notification-permission failures and retain toast fallback.
+- Catch synchronous notification-permission failures. Show toast immediately while permission is ungranted, even when the permission prompt never settles; native delivery resumes for later alerts after permission is granted.
+- 实际测试发现权限请求不结束会卡住提醒；改为未授权时立即 toast 降级，不再等待权限弹窗返回。
+- Added delivery diagnostics with fixed notification titles only, without session labels or credentials.
 - 捕获权限请求同步异常，保留 toast 降级。
 - Updated pinned DSH development dependencies and lockfile; added missing `unrun` build-config loader and published-service test dependencies; regenerated shipped bundles/declarations.
 - 更新固定开发依赖、锁文件、构建配置加载依赖与发布产物。
 
 ### Verification / 验证
 
-- Passed 33 tests, typecheck and build. A temporary Web profile on local DSH 0.2.1-alpha.1 displayed the loaded toast; OS notification-center delivery was not manually verified.
-- 33 项测试、类型检查和构建通过；本机临时 Web profile 实际显示加载提示，系统通知中心送达仍需人工验证。
+- Passed 34 tests, typecheck and build. Local DSH 0.2.1-alpha.1 daily Web profile was installed and tested with real model calls. The user confirmed receiving native question, approval and background-completion notifications.
+- 34 项测试、类型检查和构建通过；已安装到本机日常 Web profile，真实模型触发提问、审批与后台完成事件，用户确认三类系统通知实际送达。
 - Added unified-status core/browser tests and shipped-bundle integration with the published UiSession service using fixture pending domains and remote running events; added CI for typecheck, build, tests and artifact consistency.
 - 新增统一状态、浏览器行为和实际发布 UiSession 服务集成测试，以及类型检查、构建、测试与产物一致性 CI。
 

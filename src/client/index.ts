@@ -84,6 +84,7 @@ export function apply(ctx: ApprovalNotifyContext): void {
     ].join(';')
     root.appendChild(el)
     toasts.add(el)
+    console.info('[approval-notify] toast delivered:', title)
     setTimer(() => {
       el.style.opacity = '0'
       el.style.transform = 'translateY(8px)'
@@ -125,12 +126,15 @@ export function apply(ctx: ApprovalNotifyContext): void {
   }
 
   async function notifyBrowser(title: string, message: string, active: () => boolean): Promise<boolean> {
-    if (await resolveNotificationPermission() !== 'granted' || !active()) return false
+    // Permission prompts can remain pending indefinitely in embedded browsers.
+    // Never hold an attention alert behind the prompt: use toast immediately.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !active()) return false
     try {
       new Notification(title, {
         body: message,
         requireInteraction: true,
       })
+      console.info('[approval-notify] native notification created:', title)
       return true
     } catch {
       return false

@@ -40,7 +40,7 @@ pnpm build
 dsh plugin --profile web add link:$(pwd)
 ```
 
-After installation, restart `dsh web` and reload the DSH Web GUI page. The browser may ask for notification permission on first load. If permission is denied or native notification creation fails, the plugin still shows in-page toast reminders.
+After installation, restart `dsh web` and reload the DSH Web GUI page. The browser may ask for notification permission on first load. While permission is ungranted, the plugin immediately shows in-page toast reminders, even if the permission prompt never settles. Native notification creation failures also fall back to toast.
 
 ## Development
 

@@ -77,6 +77,16 @@ describe('DSH 0.2 client integration', () => {
     expect(root?.textContent).toContain('审批请求'); expect(root?.textContent).toContain('提问请求')
     expect(root?.children.length).toBeGreaterThanOrEqual(3)
   })
+  it('shows toast immediately when the permission prompt never resolves', async () => {
+    const { Native, calls } = notifications('default')
+    Native.requestPermission.mockImplementation(() => new Promise(() => {}))
+    const m = track(snapshot(), statuses('question'))
+    await flush()
+    expect(document.body.textContent).toContain('提问请求')
+    expect(calls).toHaveLength(0)
+    m.dispose()
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it('keeps native permission failures inside the fallback path', async () => {
     const { Native } = notifications('default')
     Native.requestPermission.mockImplementation(() => { throw new Error('not available') })
