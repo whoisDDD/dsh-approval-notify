@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here. / 本项目的所有重要变更均记录于此。
 
+## [0.2.0] — 2026-10-12
+
+### Changed / 变更
+
+- Migrated to DSH 0.2.1-alpha.1's unified `uiSession.sessionStatus` (`pendingInteraction`, `completionUnread`, `running`), replacing removed `pendingInteractions` and `SessionSummary.completed` fields.
+- 适配 DSH 0.2.1-alpha.1 统一状态源；完成提示遵循未读后台停止语义，避免历史闲置会话误报。
+- Include retained subagent metadata in `byId` even outside catalog `ids`; keep request-key deduplication, pending-request precedence, unknown-kind handling, and redacted labels.
+- 覆盖目录之外的保留子代理；保留请求 key 去重、交互优先级、未知类型安全处理和标题脱敏。
+
+### Fixed / 修复
+
+- Keep notification state and timers per Client context; unloading one context only removes its own toasts. Prevent late asynchronous notification delivery after disposal.
+- 通知状态、定时器按上下文独立管理，卸载只清理自己的 toast；卸载后异步权限响应不会触发提醒。
+- Catch synchronous notification-permission failures and retain toast fallback.
+- 捕获权限请求同步异常，保留 toast 降级。
+- Updated pinned DSH development dependencies and lockfile; added missing `unrun` build-config loader and published-service test dependencies; regenerated shipped bundles/declarations.
+- 更新固定开发依赖、锁文件、构建配置加载依赖与发布产物。
+
+### Verification / 验证
+
+- Passed 33 tests, typecheck and build. A temporary Web profile on local DSH 0.2.1-alpha.1 displayed the loaded toast; OS notification-center delivery was not manually verified.
+- 33 项测试、类型检查和构建通过；本机临时 Web profile 实际显示加载提示，系统通知中心送达仍需人工验证。
+- Added unified-status core/browser tests and shipped-bundle integration with the published UiSession service using fixture pending domains and remote running events; added CI for typecheck, build, tests and artifact consistency.
+- 新增统一状态、浏览器行为和实际发布 UiSession 服务集成测试，以及类型检查、构建、测试与产物一致性 CI。
+
 ## DSH `0.1.2-alpha.2` compatibility update — 2026-09-01
 ## DSH `0.1.2-alpha.2` 兼容性更新 — 2026-09-01
 

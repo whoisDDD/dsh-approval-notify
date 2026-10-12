@@ -1,0 +1,20 @@
+name: DSH compatibility
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.1'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+      - run: git diff --exit-code -- lib
+      - run: node --check lib/index.js && node --check lib/client.js
