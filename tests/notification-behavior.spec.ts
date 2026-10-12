@@ -1,183 +1,72 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { deliverAlert, alertPartsOf } from '../src/core/alert.ts'
-import { diffApprovalMessages, type PendingInteractionLike, type SessionAttentionStatus } from '../src/core/approval.ts'
+import { describe, expect, it, vi } from 'vitest'
+import { alertPartsOf, deliverAlert } from '../src/core/alert.ts'
+import { diffApprovalMessages } from '../src/core/approval.ts'
+import { id, snapshot, statuses, status, summary } from './fixtures.ts'
 
-function makeSummary(options: {
-  title?: string
-  displayTitle?: string
-  completed?: boolean
-  subagent?: boolean
-  cwd?: string
-} = {}): SessionSummary {
-  const sessionId = 's1' as SessionId
-  return {
-    id: sessionId,
-    displayTitle: options.displayTitle ?? 'Alpha',
-    ...(options.title === undefined ? {} : { title: options.title }),
-    ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    running: false,
-    blank: false,
-    updatedAt: 1,
-    ...(options.completed === undefined ? {} : { completed: options.completed }),
-    ...(options.subagent ? { origin: 'subagent' as const, parentId: 'parent' as SessionId } : {}),
-  }
-}
-
-function makeSnapshot(summary = makeSummary()): SessionListState {
-  return {
-    ids: [summary.id],
-    byId: { [summary.id]: summary },
-    current: summary.id,
-    phase: 'ready',
-    subagentsByParent: {},
-    jobsBySession: {},
-    currentAddress: undefined,
-  }
-}
-
-function pending(kind: string): ReadonlyMap<SessionId, PendingInteractionLike> {
-  return new Map([[('s1' as SessionId), { key: `${kind}:1`, kind, sessionId: 's1' as SessionId }]])
-}
-
-function makeNotifyRecorder(permission: 'granted' | 'denied' | 'default') {
-  const calls: Array<{ title: string; body: string }> = []
-  const notify = (title: string, body: string): boolean => {
-    if (permission !== 'granted') return false
-    calls.push({ title, body })
-    return true
-  }
-  const toast = vi.fn<(title: string, body: string) => void>()
-  return { calls, notify, toast }
-}
-
-describe('approval-notify core', () => {
-  it('formats alpha.2 pending interaction kinds and completed messages', () => {
-    const approval = diffApprovalMessages(makeSnapshot(), pending('approval'), new Map())
-    const question = diffApprovalMessages(makeSnapshot(), pending('question'), new Map())
-    const review = diffApprovalMessages(makeSnapshot(), pending('plan-review'), new Map())
-    const done = diffApprovalMessages(makeSnapshot(makeSummary({ completed: true })), new Map(), new Map<SessionId, SessionAttentionStatus | undefined>())
-    const subagentDone = diffApprovalMessages(makeSnapshot(makeSummary({ completed: true, subagent: true })), new Map(), new Map<SessionId, SessionAttentionStatus | undefined>())
-
-    expect(approval.messages).toEqual(['审批请求：会话「Alpha」正在等待审批'])
-    expect(question.messages).toEqual(['提问请求：会话「Alpha」正在等待你的选择'])
-    expect(review.messages).toEqual(['计划审核：会话「Alpha」正在等待确认'])
-    expect(done.messages).toEqual(['已完成：会话「Alpha」已完成'])
-    expect(subagentDone.messages).toEqual(['子代理已完成：会话「Alpha」已完成'])
+describe('unified DSH session status', () => {
+  it.each([
+    ['approval', '审批请求：会话「Alpha」正在等待审批'],
+    ['question', '提问请求：会话「Alpha」正在等待你的选择'],
+    ['plan-review', '计划审核：会话「Alpha」正在等待确认'],
+    ['completed', '已完成：会话「Alpha」已完成'],
+  ])('formats %s', (kind, expected) => {
+    expect(diffApprovalMessages(snapshot(), statuses(kind), new Map()).messages).toEqual([expected])
   })
-
-  it('ignores unknown pending interaction kinds safely', () => {
-    const result = diffApprovalMessages(makeSnapshot(), pending('future-interaction'), new Map())
-    expect(result.messages).toEqual([])
-    expect(result.nextSeen.get('s1' as SessionId)).toBeUndefined()
+  it('labels retained subagents outside catalog ids', () => {
+    const list = snapshot([summary('s1', 'Child', true)])
+    list.ids = []
+    expect(diffApprovalMessages(list, statuses('completed'), new Map()).messages)
+      .toEqual(['子代理已完成：会话「Child」已完成'])
   })
-
-  it('prefers a known pending interaction over completed state', () => {
-    const result = diffApprovalMessages(makeSnapshot(makeSummary({ completed: true })), pending('approval'), new Map())
-    expect(result.messages).toEqual(['审批请求：会话「Alpha」正在等待审批'])
+  it('ignores idle historic sessions, even with a legacy completed field', () => {
+    const row = { ...summary(), completed: true }
+    expect(diffApprovalMessages(snapshot([row]), statuses(), new Map()).messages).toEqual([])
   })
-
-  it('does not include unrelated sensitive summary fields in notification text', () => {
-    const result = diffApprovalMessages(makeSnapshot(makeSummary({
-      cwd: 'C:\\private\\sk-live-api-key-and-pat',
-      completed: true,
-    })), new Map(), new Map())
-    expect(result.messages).toEqual(['已完成：会话「Alpha」已完成'])
-    expect(result.messages.join(' ')).not.toContain('sk-live-api-key-and-pat')
+  it('does not invent completion while running or for an unknown pending domain', () => {
+    for (const state of [
+      { ...status('completed'), running: true },
+      { ...status('future'), completionUnread: true },
+    ]) expect(diffApprovalMessages(snapshot(), new Map([[id('s1'), state]]), new Map()).messages).toEqual([])
   })
-
-  it('redacts common token-shaped content from the session label', () => {
-    const result = diffApprovalMessages(makeSnapshot(makeSummary({
-      title: 'Deploy bearer: sk-live-abcdefghijklmnop',
-      completed: true,
-    })), new Map(), new Map())
-    expect(result.messages).toEqual(['已完成：会话「Deploy [redacted-secret]」已完成'])
-    expect(result.messages.join(' ')).not.toContain('sk-live-abcdefghijklmnop')
+  it('prefers known pending requests over completionUnread', () => {
+    expect(diffApprovalMessages(snapshot(), new Map([[id('s1'), { ...status('approval'), completionUnread: true }]]), new Map()).messages)
+      .toEqual(['审批请求：会话「Alpha」正在等待审批'])
   })
-
-  it('does not repeat a new pending request with the same kind but a new alpha.2 key', () => {
-    const first = pending('approval')
-    const next = new Map([[('s1' as SessionId), { key: 'approval:2', kind: 'approval', sessionId: 's1' as SessionId }]])
-    const firstResult = diffApprovalMessages(makeSnapshot(), first, new Map())
-    const nextResult = diffApprovalMessages(makeSnapshot(), next, firstResult.nextSeen)
-    expect(nextResult.messages).toEqual(['审批请求：会话「Alpha」正在等待审批'])
+  it('deduplicates unchanged requests and notifies replacements with new keys', () => {
+    const first = diffApprovalMessages(snapshot(), statuses('approval'), new Map())
+    expect(diffApprovalMessages(snapshot(), statuses('approval'), first.nextSeen).messages).toEqual([])
+    expect(diffApprovalMessages(snapshot(), statuses('approval', 's1', 'approval:2'), first.nextSeen).messages).toHaveLength(1)
   })
-  it('uses displayTitle when the durable title is blank', () => {
-    const result = diffApprovalMessages(makeSnapshot(makeSummary({ title: '   ', displayTitle: 'Workspace' })), pending('question'), new Map())
-    expect(result.messages).toEqual(['提问请求：会话「Workspace」正在等待你的选择'])
+  it('notifies subsequent completion after acknowledgement and another run', () => {
+    const first = diffApprovalMessages(snapshot(), statuses('completed'), new Map())
+    expect(diffApprovalMessages(snapshot(), statuses('completed'), first.nextSeen).messages).toEqual([])
+    const cleared = diffApprovalMessages(snapshot(), statuses(), first.nextSeen)
+    expect(diffApprovalMessages(snapshot(), statuses('completed'), cleared.nextSeen).messages).toHaveLength(1)
   })
-
-  it('splits alert messages into title and body', () => {
-    expect(alertPartsOf('审批请求：会话「Alpha」正在等待审批')).toEqual({
-      title: '审批请求',
-      body: '会话「Alpha」正在等待审批',
-    })
+  it('cleans markers when a session disappears; tolerates status before metadata', () => {
+    const first = diffApprovalMessages(snapshot(), statuses('approval'), new Map())
+    const removed = diffApprovalMessages(snapshot([]), statuses('approval'), first.nextSeen)
+    expect(removed.messages).toEqual([])
+    expect(removed.nextSeen.size).toBe(0)
+    expect(diffApprovalMessages(snapshot(), statuses('approval'), removed.nextSeen).messages).toHaveLength(1)
   })
-
-  it('prefers notification and skips toast when granted', () => {
-    const { calls, notify, toast } = makeNotifyRecorder('granted')
-    deliverAlert('审批请求：会话「Alpha」正在等待审批', notify, toast)
-    expect(calls).toEqual([{ title: '审批请求', body: '会话「Alpha」正在等待审批' }])
-    expect(toast).not.toHaveBeenCalled()
-  })
-
-  it('falls back to toast when notification is unavailable', () => {
-    const { calls, notify, toast } = makeNotifyRecorder('denied')
-    deliverAlert('提问请求：会话「Alpha」正在等待你的选择', notify, toast)
-    expect(calls).toEqual([])
-    expect(toast).toHaveBeenCalledWith('提问请求', '会话「Alpha」正在等待你的选择')
+  it('uses displayTitle for blank titles and redacts tokens without exposing cwd', () => {
+    const row = { ...summary(), title: '  ', displayTitle: 'Deploy bearer: sk-live-abcdefghijklmnop', cwd: '/private/secret' }
+    expect(diffApprovalMessages(snapshot([row]), statuses('approval'), new Map()).messages)
+      .toEqual(['审批请求：会话「Deploy [redacted-secret]」正在等待审批'])
   })
 })
-
-describe('approval-notify notification mode', () => {
-  beforeEach(() => {
-    ;(globalThis as typeof globalThis & { Notification?: any }).Notification = class FakeNotification {
-      static permission: NotificationPermission = 'default'
-      static requestPermission = vi.fn(async () => 'granted' as NotificationPermission)
-      constructor(public title: string, public options: NotificationOptions) {}
-    } as unknown as typeof Notification
+describe('delivery helpers', () => {
+  it('splits title/body and prefers native notifications', () => {
+    expect(alertPartsOf('审批请求：Alpha')).toEqual({ title: '审批请求', body: 'Alpha' })
+    const notify = vi.fn(() => true); const toast = vi.fn()
+    deliverAlert('审批请求：Alpha', notify, toast)
+    expect(notify).toHaveBeenCalledWith('审批请求', 'Alpha')
+    expect(toast).not.toHaveBeenCalled()
   })
-
-  afterEach(() => {
-    delete (globalThis as typeof globalThis & { Notification?: any }).Notification
-    vi.restoreAllMocks()
-  })
-
-  it('prompts for permission when default and then creates a notification', async () => {
-    const permissionRequest = vi.fn(async () => 'granted' as NotificationPermission)
-    const created = vi.fn()
-    ;(globalThis as typeof globalThis & { Notification: any }).Notification = class {
-      static permission: NotificationPermission = 'default'
-      static requestPermission = permissionRequest
-      constructor(title: string, options: NotificationOptions) {
-        created(title, options)
-      }
-    }
-
-    const notifyBrowser = async (title: string, body: string): Promise<boolean> => {
-      const NotificationCtor = globalThis.Notification as unknown as {
-        permission: NotificationPermission
-        requestPermission: () => Promise<NotificationPermission>
-      }
-      if (NotificationCtor.permission === 'default') {
-        await NotificationCtor.requestPermission()
-        NotificationCtor.permission = 'granted'
-      }
-      if (NotificationCtor.permission !== 'granted') return false
-      new (globalThis.Notification as unknown as { new (title: string, options: NotificationOptions): Notification })(title, {
-        body,
-        requireInteraction: true,
-      })
-      return true
-    }
-
-    const notified = await notifyBrowser('审批请求', '会话「Alpha」正在等待审批')
-    expect(permissionRequest).toHaveBeenCalled()
-    expect(created).toHaveBeenCalledWith('审批请求', {
-      body: '会话「Alpha」正在等待审批',
-      requireInteraction: true,
-    })
-    expect(notified).toBe(true)
+  it('falls back when native delivery fails', () => {
+    const toast = vi.fn()
+    deliverAlert('提问请求：Alpha', () => false, toast)
+    expect(toast).toHaveBeenCalledWith('提问请求', 'Alpha')
   })
 })

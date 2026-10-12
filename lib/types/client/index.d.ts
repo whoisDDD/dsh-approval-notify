@@ -5,7 +5,7 @@ type ApprovalNotifyContext = Context & {
     readonly sessions: ISessions;
     readonly uiSession: UiSession;
 };
-/** Services provided by alpha.2's Session Controller and UI Session plugins. */
+/** Service names gate activation; package metadata only describes dependencies. */
 export declare const inject: string[];
 export declare function apply(ctx: ApprovalNotifyContext): void;
 export {};

@@ -1,11 +1,12 @@
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { SessionStatus, SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export type SessionListEntry = SessionSummary
 export type SessionAttentionStatus = 'approval' | 'question' | 'plan-review' | 'completed'
 export type SessionAttentionMarker = string
 
-/** Stable alpha.2 fields used from uiSession.pendingInteractions. */
+/** Stable pending request fields from uiSession.sessionStatus. */
 export interface PendingInteractionLike {
   readonly key: string
   readonly kind: string
@@ -43,10 +44,10 @@ function pendingStatusOf(interaction: PendingInteractionLike | undefined): Sessi
 }
 
 function attentionStatusOf(
-  entry: SessionListEntry,
-  interaction: PendingInteractionLike | undefined,
+  state: SessionStatus | undefined,
 ): SessionAttentionStatus | undefined {
-  return pendingStatusOf(interaction) ?? (entry.completed === true ? 'completed' : undefined)
+  if (state?.pendingInteraction !== undefined) return pendingStatusOf(state.pendingInteraction)
+  return state?.completionUnread === true && state.running !== true ? 'completed' : undefined
 }
 
 function attentionMarkerOf(
@@ -85,15 +86,17 @@ function messageFor(entry: SessionListEntry, status: SessionAttentionStatus): st
 
 export function diffApprovalMessages(
   snapshot: SessionListState,
-  pendingInteractions: ReadonlyMap<SessionId, PendingInteractionLike>,
+  statuses: SessionStatusSnapshot,
   previous: ReadonlyMap<SessionId, SessionAttentionMarker | undefined>,
 ): ApprovalDiff {
   const nextSeen = new Map<SessionId, SessionAttentionMarker | undefined>()
   const messages: string[] = []
-  for (const sessionId of snapshot.ids) {
+  // Retained child rows can live in byId without belonging to the Host catalog ids.
+  for (const sessionId of Object.keys(snapshot.byId) as SessionId[]) {
     const entry = snapshot.byId[sessionId]
-    const interaction = pendingInteractions.get(sessionId)
-    const status = attentionStatusOf(entry, interaction)
+    const state = statuses.get(sessionId)
+    const interaction = state?.pendingInteraction
+    const status = attentionStatusOf(state)
     const current = attentionMarkerOf(interaction, status)
     const prior = previous.get(sessionId)
     nextSeen.set(sessionId, current)

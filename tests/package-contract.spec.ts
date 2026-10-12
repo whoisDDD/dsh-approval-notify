@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import pkg from '../package.json'
 
-describe('alpha.2 package contract', () => {
+describe('DSH 0.2 package contract', () => {
   it('declares the web client graph and ./client export', () => {
     expect(pkg.dsh?.client).toEqual({
       inject: [
