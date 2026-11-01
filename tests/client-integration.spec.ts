@@ -12,20 +12,23 @@ function store<T>(initial: T) {
 }
 function mount(initial = snapshot(), initialStatus: SessionStatusSnapshot = new Map()) {
   const list = store(initial); const sessionStatus = store(initialStatus)
+  const openSession = vi.fn()
   const disposers: Array<() => void> = []
-  apply({ sessions: { list }, uiSession: { sessionStatus }, effect(fn: () => () => void) {
+  apply({ sessions: { list }, uiSession: { sessionStatus }, uiWorkspace: { openSession }, effect(fn: () => () => void) {
     const dispose = fn(); disposers.push(dispose); return dispose
   } } as unknown as Parameters<typeof apply>[0])
-  return { list, sessionStatus, dispose() { for (const fn of disposers.splice(0)) fn() } }
+  return { list, sessionStatus, openSession, dispose() { for (const fn of disposers.splice(0)) fn() } }
 }
 function notifications(permission: NotificationPermission = 'granted', fail = false) {
-  const calls: Array<{ title: string; options: NotificationOptions }> = []
+  const calls: Array<{ title: string; options: NotificationOptions; instance: Native }> = []
   class Native {
     static permission = permission
     static requestPermission = vi.fn(async () => 'denied' as NotificationPermission)
+    onclick: (() => void) | null = null
+    close = vi.fn()
     constructor(title: string, options: NotificationOptions) {
       if (fail) throw new Error('unsupported notification')
-      calls.push({ title, options })
+      calls.push({ title, options, instance: this })
     }
   }
   vi.stubGlobal('Notification', Native)
@@ -35,13 +38,13 @@ const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve()
 const mounted: ReturnType<typeof mount>[] = []
 function track(...args: Parameters<typeof mount>) { const m = mount(...args); mounted.push(m); return m }
 
-beforeEach(() => { document.body.innerHTML = ''; vi.useFakeTimers() })
+beforeEach(() => { document.body.innerHTML = ''; vi.useFakeTimers(); vi.spyOn(window, 'focus').mockImplementation(() => {}) })
 afterEach(() => {
   for (const m of mounted.splice(0)) m.dispose()
   vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); document.body.innerHTML = ''
 })
 describe('DSH 0.2 client integration', () => {
-  it('injects public sessions and uiSession services', () => { expect(inject).toEqual(['sessions', 'uiSession']) })
+  it('injects public session and workspace services', () => { expect(inject).toEqual(['sessions', 'uiSession', 'uiWorkspace']) })
   it.each(['approval', 'question', 'plan-review', 'completed'])('notifies %s from sessionStatus', async kind => {
     const { calls } = notifications()
     const m = track()
@@ -114,6 +117,34 @@ describe('DSH 0.2 client integration', () => {
     second.sessionStatus.set(statuses('question', 's1', 'second')); await flush()
     expect(document.body.textContent?.match(/提问请求/g)).toHaveLength(2)
   })
+  it('opens the exact session when a native notification is clicked', async () => {
+    const { calls } = notifications()
+    const m = track(snapshot([summary('s1', 'Same'), summary('s2', 'Same')]))
+    m.sessionStatus.set(statuses('approval', 's2'))
+    calls[0].instance.onclick?.()
+    expect(m.openSession).toHaveBeenCalledWith(id('s2'))
+    expect(calls[0].instance.close).toHaveBeenCalledOnce()
+    m.dispose()
+    calls[0].instance.onclick?.()
+    expect(m.openSession).toHaveBeenCalledOnce()
+  })
+  it('opens a session from the fallback toast by mouse or keyboard', () => {
+    notifications('denied')
+    const m = track(snapshot(), statuses('approval'))
+    const toast = document.querySelector('[role="button"]') as HTMLElement
+    toast.click()
+    toast.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(m.openSession).toHaveBeenCalledTimes(2)
+    expect(m.openSession).toHaveBeenCalledWith(id('s1'))
+  })
+  it('does not poll while idle and reacts to store events', () => {
+    notifications()
+    const spy = vi.spyOn(window, 'setInterval')
+    const m = track()
+    expect(spy).not.toHaveBeenCalled()
+    m.sessionStatus.set(statuses('question'))
+    expect(m.sessionStatus.listeners.size).toBe(1)
+  })
   it('reactivates after disposal', async () => {
     const { calls } = notifications()
     const first = track(snapshot(), statuses('approval')); await flush(); first.dispose()
@@ -121,3 +152,4 @@ describe('DSH 0.2 client integration', () => {
     expect(calls.map(c => c.title)).toEqual(['审批请求', '提问请求'])
   })
 })
+

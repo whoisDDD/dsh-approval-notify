@@ -14,8 +14,14 @@ export interface PendingInteractionLike {
 }
 
 export interface ApprovalDiff {
-  messages: string[]
+  messages: SessionAlert[]
   nextSeen: Map<SessionId, SessionAttentionMarker | undefined>
+}
+
+export interface SessionAlert {
+  sessionId: SessionId
+  title: string
+  body: string
 }
 
 function sessionLabel(entry: SessionListEntry): string {
@@ -61,26 +67,17 @@ function attentionMarkerOf(
   return status
 }
 
-function completedMessageFor(entry: SessionListEntry, label: string): string {
-  if (entry.origin === 'subagent' || entry.parentId !== undefined) {
-    return `子代理已完成：会话「${label}」已完成`
-  }
-  return `已完成：会话「${label}」已完成`
-}
-
-function messageFor(entry: SessionListEntry, status: SessionAttentionStatus): string | undefined {
+function messageFor(sessionId: SessionId, entry: SessionListEntry, status: SessionAttentionStatus): SessionAlert {
   const label = sessionLabel(entry)
   switch (status) {
     case 'approval':
-      return `审批请求：会话「${label}」正在等待审批`
+      return { sessionId, title: '审批请求', body: `会话「${label}」正在等待审批` }
     case 'question':
-      return `提问请求：会话「${label}」正在等待你的选择`
+      return { sessionId, title: '提问请求', body: `会话「${label}」正在等待你的选择` }
     case 'plan-review':
-      return `计划审核：会话「${label}」正在等待确认`
+      return { sessionId, title: '计划审核', body: `会话「${label}」正在等待确认` }
     case 'completed':
-      return completedMessageFor(entry, label)
-    default:
-      return undefined
+      return { sessionId, title: entry.origin === 'subagent' || entry.parentId !== undefined ? '子代理已完成' : '已完成', body: `会话「${label}」已完成` }
   }
 }
 
@@ -90,7 +87,7 @@ export function diffApprovalMessages(
   previous: ReadonlyMap<SessionId, SessionAttentionMarker | undefined>,
 ): ApprovalDiff {
   const nextSeen = new Map<SessionId, SessionAttentionMarker | undefined>()
-  const messages: string[] = []
+  const messages: SessionAlert[] = []
   // Retained child rows can live in byId without belonging to the Host catalog ids.
   for (const sessionId of Object.keys(snapshot.byId) as SessionId[]) {
     const entry = snapshot.byId[sessionId]
@@ -101,9 +98,9 @@ export function diffApprovalMessages(
     const prior = previous.get(sessionId)
     nextSeen.set(sessionId, current)
     if (status !== undefined && current !== prior) {
-      const message = messageFor(entry, status)
-      if (message !== undefined) messages.push(message)
+      messages.push(messageFor(sessionId, entry, status))
     }
   }
   return { messages, nextSeen }
 }
+

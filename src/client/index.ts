@@ -2,12 +2,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { UiSession, SessionStatusSnapshot } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { alertPartsOf } from '../core/alert.ts'
-import { diffApprovalMessages, type SessionAttentionMarker } from '../core/approval.ts'
+import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { diffApprovalMessages, type SessionAlert, type SessionAttentionMarker } from '../core/approval.ts'
 
 type ApprovalNotifyContext = Context & {
   readonly sessions: ISessions
   readonly uiSession: UiSession
+  readonly uiWorkspace: UiWorkspace
 }
 
 /**
@@ -19,11 +20,10 @@ type ApprovalNotifyContext = Context & {
 const TOAST_ROOT_ID = 'dsh-approval-toast-root'
 const TOAST_ITEM_CLASS = 'dsh-approval-toast'
 const TOAST_LIFETIME_MS = 12_000
-const POLL_FALLBACK_MS = 1500
 const BOOT_NOTICE = 'approval-notify 已加载'
 
 /** Service names gate activation; package metadata only describes dependencies. */
-export const inject = ['sessions', 'uiSession']
+export const inject = ['sessions', 'uiSession', 'uiWorkspace']
 
 export function apply(ctx: ApprovalNotifyContext): void {
   let lastSeen = new Map<SessionId, SessionAttentionMarker | undefined>()
@@ -62,10 +62,21 @@ export function apply(ctx: ApprovalNotifyContext): void {
     return timer
   }
 
-  function createToast(title: string, body: string): void {
+  function createToast(title: string, body: string, onClick?: () => void): void {
     const root = ensureToastRoot()
     const el = document.createElement('div')
     el.className = TOAST_ITEM_CLASS
+    if (onClick !== undefined) {
+      el.setAttribute('role', 'button')
+      el.tabIndex = 0
+      el.addEventListener('click', onClick)
+      el.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      })
+    }
     el.innerHTML = `
       <div style="font-size:13px;font-weight:700;line-height:1.4;margin-bottom:6px;color:#ffd15c">${escapeHtml(title)}</div>
       <div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:#f5f7fb">${escapeHtml(body)}</div>
@@ -81,6 +92,7 @@ export function apply(ctx: ApprovalNotifyContext): void {
       'box-shadow:0 12px 34px rgba(0, 0, 0, 0.38)',
       'backdrop-filter:blur(8px)',
       'pointer-events:auto',
+      ...(onClick === undefined ? [] : ['cursor:pointer']),
     ].join(';')
     root.appendChild(el)
     toasts.add(el)
@@ -125,26 +137,38 @@ export function apply(ctx: ApprovalNotifyContext): void {
     return permissionPrompt
   }
 
-  async function notifyBrowser(title: string, message: string, active: () => boolean): Promise<boolean> {
+  function openSession(sessionId: SessionId, active: () => boolean): void {
+    if (!active()) return
+    try { window.focus() } catch { /* Window activation is controlled by the platform. */ }
+    try { ctx.uiWorkspace.openSession(sessionId) } catch (error) {
+      console.warn('[approval-notify] unable to open session:', error)
+    }
+  }
+
+  function notifyBrowser(alert: SessionAlert, active: () => boolean): boolean {
     // Permission prompts can remain pending indefinitely in embedded browsers.
     // Never hold an attention alert behind the prompt: use toast immediately.
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !active()) return false
     try {
-      new Notification(title, {
-        body: message,
+      const notification = new Notification(alert.title, {
+        body: alert.body,
         requireInteraction: true,
       })
-      console.info('[approval-notify] native notification created:', title)
+      notification.onclick = () => {
+        openSession(alert.sessionId, active)
+        notification.close()
+      }
+      console.info('[approval-notify] native notification created:', alert.title)
       return true
     } catch {
       return false
     }
   }
 
-  async function renderAlert(message: string, active: () => boolean): Promise<void> {
-    const { title, body } = alertPartsOf(message)
-    const notified = await notifyBrowser(title, body, active)
-    if (!notified && active()) createToast(title, body)
+  function renderAlert(alert: SessionAlert, active: () => boolean): void {
+    if (!notifyBrowser(alert, active) && active()) {
+      createToast(alert.title, alert.body, () => openSession(alert.sessionId, active))
+    }
   }
 
   function runCheck(
@@ -159,7 +183,7 @@ export function apply(ctx: ApprovalNotifyContext): void {
     )
     lastSeen = nextSeen
     if (messages.length === 0 || !active()) return
-    for (const message of messages) void renderAlert(message, active)
+    for (const message of messages) renderAlert(message, active)
   }
 
   ctx.effect(() => {
@@ -170,15 +194,13 @@ export function apply(ctx: ApprovalNotifyContext): void {
     const sync = (): void => {
       runCheck(ctx, ctx.uiSession.sessionStatus.getSnapshot(), active)
     }
-    sync()
     const unsubscribeSessions = ctx.sessions.list.subscribe(sync)
     const unsubscribePending = ctx.uiSession.sessionStatus.subscribe(sync)
-    const timer = window.setInterval(sync, POLL_FALLBACK_MS)
+    sync()
     return () => {
       disposed = true
       unsubscribeSessions()
       unsubscribePending()
-      window.clearInterval(timer)
       for (const item of toastTimers) window.clearTimeout(item)
       toastTimers.clear()
       lastSeen = new Map()
@@ -191,3 +213,4 @@ export function apply(ctx: ApprovalNotifyContext): void {
     }
   }, 'approval-notify: watch sessions')
 }
+
