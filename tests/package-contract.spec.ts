@@ -7,6 +7,7 @@ describe('DSH 0.2 package contract', () => {
       inject: [
         '@deepseek-ai/dsh-api-session-controller',
         '@deepseek-ai/dsh-client-ui-session',
+        '@deepseek-ai/dsh-client-ui-workspace',
       ],
       platform: 'web',
     })
@@ -20,3 +21,4 @@ describe('DSH 0.2 package contract', () => {
     }
   })
 })
+

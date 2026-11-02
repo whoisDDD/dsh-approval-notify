@@ -1,0 +1,6 @@
+# Source maps embed TypeScript source verbatim; keep source and generated bundles
+# consistent when contributors use core.autocrlf on Windows.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.map text eol=lf

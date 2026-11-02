@@ -34,6 +34,7 @@ it('runs the shipped notifier against published DSH UiSession pending domains an
     remoteEvents.set(name, fn); return () => { remoteEvents.delete(name) }
   } })
   ctx.provide('sessions', sessions)
+  ctx.provide('uiWorkspace', { openSession: vi.fn() })
   try {
     const published = load<{ UiSession: typeof UiSession }>(require.resolve('@deepseek-ai/dsh-client-ui-session/client'))
     const ui = new published.UiSession(ctx, sessions as unknown as ConstructorParameters<typeof UiSession>[1])
@@ -64,3 +65,4 @@ it('runs the shipped notifier against published DSH UiSession pending domains an
     document.body.innerHTML = ''
   }
 })
+

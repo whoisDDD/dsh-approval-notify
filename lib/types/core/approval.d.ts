@@ -11,7 +11,12 @@ export interface PendingInteractionLike {
     readonly sessionId: SessionId;
 }
 export interface ApprovalDiff {
-    messages: string[];
+    messages: SessionAlert[];
     nextSeen: Map<SessionId, SessionAttentionMarker | undefined>;
+}
+export interface SessionAlert {
+    sessionId: SessionId;
+    title: string;
+    body: string;
 }
 export declare function diffApprovalMessages(snapshot: SessionListState, statuses: SessionStatusSnapshot, previous: ReadonlyMap<SessionId, SessionAttentionMarker | undefined>): ApprovalDiff;

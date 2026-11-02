@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. / 本项目的所有重要变更均记录于此。
 
+## [0.2.1] — 2026-11-02
+
+- Identify the event-driven/navigation build and native click path using fixed, non-sensitive diagnostic logs. Keep TypeScript and generated bundle line endings consistent across Windows and Linux checkouts. / 增加不含会话信息的运行版本与通知点击诊断日志，统一跨平台源码及构建产物换行。
+- Use DSH session/status subscriptions instead of the 1.5-second polling fallback. / 使用 DSH 状态订阅，移除 1.5 秒兜底轮询。
+- Keep session identities in alerts and open the corresponding session on native notification or toast activation using `uiWorkspace.openSession`; platform window activation remains best-effort. / 保留通知对应的会话 ID，点击系统通知或 toast 可打开相应会话；窗口唤醒受平台限制。
+- Preserve full session titles containing Chinese colons; remove the unused text-splitting delivery helper. / 修复标题包含中文冒号时被截断，移除未使用的文本拆分逻辑。
+- Target DSH 0.2.1-alpha.1. On Windows 10 22H2 with DSH Desktop 0.2.1-rc.5, question notification clicks selected the source session; a minimized window did not automatically restore. / 适配目标仍为 DSH 0.2.1-alpha.1；Windows 10 22H2 和 DSH Desktop 0.2.1-rc.5 实测提问通知可切换会话，但最小化窗口未自动恢复。
+- Windows device testing did not complete approval, plan review, fallback toast, background completion or reconnect regression; Linux and browser window activation remain unverified on real devices. / Windows 实机尚未完成审批、计划审核、toast 降级、后台完成和断线重连回归；Linux 与浏览器窗口激活尚未实机验证。
+- Document the distinct Web and Desktop profiles and portable Desktop installation. / 补充 Web 与 Desktop 独立 profile 的说明及桌面端通用安装命令。
+- Passed typecheck, build, and 36 automated tests, including the shipped bundle with the published UiSession service; Windows also reproduced the automated checks. / 类型检查、构建和 36 项自动化测试通过，包含发布版 UiSession 服务与打包产物集成；Windows 也复现了自动化检查。
+
 ## [0.2.0] — 2026-10-12
 
 ### Changed / 变更
@@ -94,3 +105,4 @@ All notable changes to this project are documented here. / 本项目的所有重
 
 - There is no settings UI yet.
 - 当前还没有设置面板。
+
