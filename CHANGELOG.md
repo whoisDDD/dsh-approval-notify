@@ -4,6 +4,7 @@ All notable changes to this project are documented here. / 本项目的所有重
 
 ## [0.2.1] — 2026-11-01
 
+- Identify the event-driven/navigation build and native click path using fixed, non-sensitive diagnostic logs. Keep TypeScript and generated bundle line endings consistent across Windows and Linux checkouts. / 增加不含会话信息的运行版本与通知点击诊断日志，统一跨平台源码及构建产物换行。
 - Use DSH session/status subscriptions instead of the 1.5-second polling fallback. / 使用 DSH 状态订阅，移除 1.5 秒兜底轮询。
 - Keep session identities in alerts and open the corresponding session on native notification or toast activation using `uiWorkspace.openSession`; platform window activation remains best-effort. / 保留通知对应的会话 ID，点击系统通知或 toast 可打开相应会话；窗口唤醒受平台限制。
 - Preserve full session titles containing Chinese colons; remove the unused text-splitting delivery helper. / 修复标题包含中文冒号时被截断，移除未使用的文本拆分逻辑。

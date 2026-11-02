@@ -61,6 +61,10 @@ Useful scripts:
 - `pnpm build` — generate `lib/` artifacts.
 - `pnpm watch` — rebuild the client bundle during development.
 
+The startup log is `[approval-notify] loaded (session-navigation, event-driven)`. A native click logs `native notification clicked`, followed by `session navigation requested` after the host navigation call returns. These logs omit session titles and IDs; a returned call does not guarantee that the UI switched or its window gained focus. If the old `loaded` log persists, inspect the actual Host/profile and loaded plugin rather than relying on source-map line numbers alone.
+
+`.gitattributes` keeps TypeScript sources and generated bundles at LF so Windows checkouts do not embed CRLF in source maps. Existing working trees may need affected files checked out again after updating; preserve any local changes first.
+
 ## Notes and limitations
 
 - This plugin does not implement a settings UI yet.

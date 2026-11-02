@@ -53,6 +53,10 @@ pnpm test
 
 真实服务集成测试使用 fixture 远程事件，不请求模型 API，不读取真实凭据；它不等同于操作系统通知中心的人工验证。
 
+运行版本排查：启用插件后，控制台应显示 `[approval-notify] loaded (session-navigation, event-driven)`；点击系统通知后应显示 `native notification clicked`，导航接口调用返回后显示 `session navigation requested`。这些日志不包含会话标题或 ID；最后一条只表示调用已发出，不保证页面已切换或窗口已置顶。若仍看到旧版 `loaded` 日志，应检查实际运行的 Host/profile 和它加载的插件，而不是仅凭源码映射行号判断。
+
+仓库通过 `.gitattributes` 固定 TypeScript 源码和构建产物为 LF，避免 Windows 的 CRLF 被写入 source map。已有工作区在拉取更新后应先确认无本地修改，再按 Git 换行规则重新检出受影响文件；不要直接覆盖未提交的修改。
+
 ## 限制
 
 尚无设置界面。通知能否送达取决于浏览器权限、浏览器对后台标签的限制及系统通知策略。

@@ -119,9 +119,13 @@ describe('DSH 0.2 client integration', () => {
   })
   it('opens the exact session when a native notification is clicked', async () => {
     const { calls } = notifications()
+    const log = vi.spyOn(console, 'info')
     const m = track(snapshot([summary('s1', 'Same'), summary('s2', 'Same')]))
+    expect(log).toHaveBeenCalledWith('[approval-notify] loaded (session-navigation, event-driven)')
     m.sessionStatus.set(statuses('approval', 's2'))
     calls[0].instance.onclick?.()
+    expect(log).toHaveBeenCalledWith('[approval-notify] native notification clicked')
+    expect(log).toHaveBeenCalledWith('[approval-notify] session navigation requested')
     expect(m.openSession).toHaveBeenCalledWith(id('s2'))
     expect(calls[0].instance.close).toHaveBeenCalledOnce()
     m.dispose()

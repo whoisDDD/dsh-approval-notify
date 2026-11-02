@@ -121,7 +121,7 @@ export function apply(ctx: ApprovalNotifyContext): void {
   function showBootNotice(): void {
     if (bootNoticeShown) return
     bootNoticeShown = true
-    console.info('[approval-notify] loaded')
+    console.info('[approval-notify] loaded (session-navigation, event-driven)')
     createToast('通知已启用', BOOT_NOTICE)
   }
 
@@ -140,7 +140,10 @@ export function apply(ctx: ApprovalNotifyContext): void {
   function openSession(sessionId: SessionId, active: () => boolean): void {
     if (!active()) return
     try { window.focus() } catch { /* Window activation is controlled by the platform. */ }
-    try { ctx.uiWorkspace.openSession(sessionId) } catch (error) {
+    try {
+      ctx.uiWorkspace.openSession(sessionId)
+      console.info('[approval-notify] session navigation requested')
+    } catch (error) {
       console.warn('[approval-notify] unable to open session:', error)
     }
   }
@@ -155,6 +158,7 @@ export function apply(ctx: ApprovalNotifyContext): void {
         requireInteraction: true,
       })
       notification.onclick = () => {
+        if (active()) console.info('[approval-notify] native notification clicked')
         openSession(alert.sessionId, active)
         notification.close()
       }
