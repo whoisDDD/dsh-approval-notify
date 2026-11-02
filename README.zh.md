@@ -38,6 +38,18 @@ dsh plugin --profile web add link:$(pwd)
 
 安装后重启 `dsh web` 并刷新页面。首次加载可能请求通知权限；未获得原生通知权限时立即显示 toast，即使权限弹窗一直未返回也不会阻塞提醒。Host 半端为空，不注册网络接口。
 
+### 桌面端与 Web 的 profile
+
+DSH 官方桌面端使用独立的 `desktop` profile；桌面界面使用 Web 技术并不意味着它读取 `web` profile。只在 `web` 中安装或更换本插件，不会自动更改桌面端的插件配置。对于 DSH 0.2.1-alpha.1 和 0.2.2-alpha.2，默认目录分别是 `~/.dsh/profiles/desktop` 与 `~/.dsh/profiles/web`；若桌面进程设置了 `DSH_HOME`，则以该进程的实际值为准。
+
+安装到桌面端前，先至少启动一次桌面应用初始化 profile，并完全退出应用及其 Host。将安装命令中的 `--profile web` 改为 `--profile desktop`；Windows PowerShell 下例如：
+
+```powershell
+dsh plugin --profile desktop add 'link:E:/DSHworkspace/approval-notify-pr3'
+```
+
+这是修改桌面 profile 的安装操作。保留现有 profile 备份，检查所用 DSH CLI 的版本、用户及 `DSH_HOME` 与桌面进程一致；不要在仍有任务运行时强制结束 Host。安装后重启桌面端，以启动日志和实际收到的 JavaScript 确认版本。
+
 ## 开发与验证
 
 ```sh

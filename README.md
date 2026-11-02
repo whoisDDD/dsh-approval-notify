@@ -44,6 +44,10 @@ dsh plugin --profile web add link:$(pwd)
 
 After installation, restart `dsh web` and reload the DSH Web GUI page. The browser may ask for notification permission on first load. While permission is ungranted, the plugin immediately shows in-page toast reminders, even if the permission prompt never settles. Native notification creation failures also fall back to toast.
 
+### Desktop and Web profiles
+
+DSH Desktop has its own `desktop` profile; installing the plugin into the `web` profile does not automatically change Desktop. In DSH 0.2.1-alpha.1 and 0.2.2-alpha.2, their default directories are `~/.dsh/profiles/desktop` and `~/.dsh/profiles/web`; a `DSH_HOME` set for the desktop process changes the root. Start Desktop at least once to initialize its profile, then fully quit Desktop and its Host before using `dsh plugin --profile desktop add link:<absolute-plugin-path>`. Preserve existing profile backups and make sure the CLI and Desktop use the same user and DSH_HOME. Restart Desktop and verify the startup log and served JavaScript.
+
 ## Development
 
 ```sh
