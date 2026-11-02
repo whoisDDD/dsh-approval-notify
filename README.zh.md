@@ -24,7 +24,7 @@
 - 观察 `byId` 中的子代理，即使它不在 Host 会话目录的 `ids` 中；子代理有独立通知标题。
 - 未知交互类型安全忽略。通知内容仅包含会话标题和固定状态文字，常见密钥形态会脱敏。
 - 订阅、去重记录、定时器与 toast 按客户端上下文独立管理；卸载不会删除其他上下文的 toast。
-- 开发类型和发布版 UiSession 服务测试固定为 0.2.1-alpha.1；其他版本及 Windows、Linux 的浏览器和桌面窗口唤醒行为需另行实机验证。
+- 开发类型和发布版 UiSession 服务测试固定为 0.2.1-alpha.1；其他版本需另行验证。
 
 ## 安装
 
@@ -42,10 +42,11 @@ dsh plugin --profile web add link:$(pwd)
 
 DSH 官方桌面端使用独立的 `desktop` profile；桌面界面使用 Web 技术并不意味着它读取 `web` profile。只在 `web` 中安装或更换本插件，不会自动更改桌面端的插件配置。对于 DSH 0.2.1-alpha.1 和 0.2.2-alpha.2，默认目录分别是 `~/.dsh/profiles/desktop` 与 `~/.dsh/profiles/web`；若桌面进程设置了 `DSH_HOME`，则以该进程的实际值为准。
 
-安装到桌面端前，先至少启动一次桌面应用初始化 profile，并完全退出应用及其 Host。将安装命令中的 `--profile web` 改为 `--profile desktop`；Windows PowerShell 下例如：
+安装到桌面端前，先至少启动一次桌面应用初始化 profile，并完全退出应用及其 Host。在插件目录中，Windows PowerShell 下例如：
 
 ```powershell
-dsh plugin --profile desktop add 'link:E:/DSHworkspace/approval-notify-pr3'
+$pluginPath = (Get-Location).Path
+dsh plugin --profile desktop add "link:$pluginPath"
 ```
 
 这是修改桌面 profile 的安装操作。保留现有 profile 备份，检查所用 DSH CLI 的版本、用户及 `DSH_HOME` 与桌面进程一致；不要在仍有任务运行时强制结束 Host。安装后重启桌面端，以启动日志和实际收到的 JavaScript 确认版本。
@@ -72,6 +73,9 @@ pnpm test
 ## 限制
 
 尚无设置界面。通知能否送达取决于浏览器权限、浏览器对后台标签的限制及系统通知策略。
+
+- 在 Windows 10 22H2、DSH Desktop 0.2.1-rc.5 的一次实机测试中，点击提问通知可切换到对应会话；窗口最小化时未自动恢复，手动恢复后会话已切换。窗口激活行为取决于宿主和操作系统，不保证所有场景均可唤起窗口。
+- 此次实机测试未完成审批、计划审核、toast 降级、后台完成提醒及断线重连的回归；Linux 和浏览器窗口激活尚未实机验证。自动审查若在请求出现后立即处理，请求可能来不及产生提醒。
 
 ## 许可证
 

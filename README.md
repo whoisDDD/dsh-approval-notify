@@ -74,6 +74,8 @@ The startup log is `[approval-notify] loaded (session-navigation, event-driven)`
 - This plugin does not implement a settings UI yet.
 - Notification delivery depends on browser permission and the operating system notification policy.
 - Notification clicks require the originating page to remain alive; archived or unavailable sessions may not open. Window activation on Windows and Linux browsers and desktop applications requires platform-specific testing.
+- In one Windows 10 22H2 / DSH Desktop 0.2.1-rc.5 test, clicking a question notification selected the source session, but a minimized window did not restore automatically; the selected session was visible after manual restoration. Window activation depends on the host and OS and is not guaranteed.
+- The same device run did not complete approval, plan review, fallback toast, background completion, or reconnect regression; Linux and browser window activation remain unverified on real devices. Automatic review that immediately handles a request may leave no pending request to notify.
 - Requires the DSH 0.2 unified status API. DSH 0.1.2-alpha.2 is no longer supported by this release. The removed `SessionSummary.completed` and `uiSession.pendingInteractions` fields are not used. Completion means DSH reports an unread background stop; it does not certify that the task succeeded.
 - Retained subagent rows in `sessions.list.byId` are also observed, even when they are outside the Host catalog `ids`. Unknown metadata is ignored until a label is available.
 - Development types and real-service tests are pinned to 0.2.1-alpha.1; other releases require compatibility validation.
